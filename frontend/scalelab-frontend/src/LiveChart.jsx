@@ -2,7 +2,6 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
 const LiveChart = ({ data }) => {
-  // Safety check: If data is missing or empty, render nothing
   if (!data || !Array.isArray(data)) return null;
 
   return (
@@ -14,12 +13,11 @@ const LiveChart = ({ data }) => {
         </div>
       </div>
       
-      {/* FIX: We removed ResponsiveContainer to prevent the crash.
-         We are using fixed dimensions (width={250}) which is safer.
-      */}
+      {/* We removed ResponsiveContainer to stop the context crash. 
+          Using a standard div with fixed size is 100% safe. */}
       <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
         <AreaChart 
-          width={250} 
+          width={260} 
           height={100} 
           data={data}
         >
