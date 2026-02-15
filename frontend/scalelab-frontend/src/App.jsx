@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import ReactFlow, { Background, Controls, Handle, Position, useEdgesState, useNodesState } from "reactflow";
 import axios from "axios";
-import { Server, Database, Zap, Activity, Play, Layers, Info } from "lucide-react"; // Added 'Info' icon
+import { Server, Database, Zap, Activity, Play, Layers, Info } from "lucide-react"; 
+import LiveChart from "./LiveChart"; 
 import "reactflow/dist/style.css";
 import "./App.css";
 
-// --- 1. Updated Custom Node with Info Tooltip ---
+// --- Custom Node Component ---
 const CustomNode = ({ data }) => {
   const isOverloaded = data.status === "Overloaded";
   
@@ -30,7 +31,6 @@ const CustomNode = ({ data }) => {
             <span className="node-label">{data.label}</span>
           </div>
           
-          {/* INFO ICON & TOOLTIP WRAPPER */}
           <div className="info-wrapper">
             <Info size={14} className="info-icon" />
             <div className="tooltip-card">
@@ -38,7 +38,6 @@ const CustomNode = ({ data }) => {
               <div className="tooltip-body">{data.description}</div>
             </div>
           </div>
-
         </div>
         
         <div className="node-metrics">
@@ -67,48 +66,49 @@ const CustomNode = ({ data }) => {
   );
 };
 
+// --- FIX: Defined OUTSIDE component to prevent React Flow warning ---
+const nodeTypes = { custom: CustomNode };
+
 function App() {
   const [traffic, setTraffic] = useState(8000);
   const [isSimulating, setIsSimulating] = useState(false);
   const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]); 
 
-  const nodeTypes = useMemo(() => ({ custom: CustomNode }), []);
-
-  // --- 2. Updated Data with Descriptions ---
   const initialNodes = [
     { 
       id: "lb1", type: 'custom', position: { x: 100, y: 200 }, 
       data: { 
         label: "Load Balancer", type: "load_balancer", latency: 0, status: "Idle",
-        description: "Distributes incoming traffic across multiple servers to prevent overload."
+        description: "Distributes incoming traffic across multiple servers."
       } 
     },
     { 
       id: "app1", type: 'custom', position: { x: 450, y: 100 }, 
       data: { 
         label: "App Server 01", type: "app_server", latency: 0, status: "Idle",
-        description: "Processes core application logic and handles user HTTP requests."
+        description: "Processes core application logic and HTTP requests."
       } 
     },
     { 
       id: "app2", type: 'custom', position: { x: 450, y: 300 }, 
       data: { 
         label: "App Server 02", type: "app_server", latency: 0, status: "Idle",
-        description: "A secondary server to handle excess traffic and ensure high availability."
+        description: "Secondary server for high availability."
       } 
     },
     { 
       id: "cache1", type: 'custom', position: { x: 800, y: 100 }, 
       data: { 
         label: "Redis Cluster", type: "cache", latency: 0, status: "Idle",
-        description: "Stores frequently accessed data in memory for ultra-fast retrieval."
+        description: "Stores frequently accessed data in memory."
       } 
     },
     { 
       id: "db1", type: 'custom', position: { x: 800, y: 300 }, 
       data: { 
         label: "Primary DB", type: "database", latency: 0, status: "Idle",
-        description: "The persistent storage system where all critical user data is saved."
+        description: "Persistent storage system for critical user data."
       } 
     }
   ];
@@ -124,8 +124,6 @@ function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // ... (keep the rest of your simulate function exactly the same) ...
-  
   const simulate = async () => {
     setIsSimulating(true);
     try {
@@ -140,6 +138,16 @@ function App() {
 
       setResult(response.data);
 
+      setHistory(prev => {
+        const newPoint = { 
+          time: new Date().toLocaleTimeString(), 
+          latency: response.data.total_latency 
+        };
+        const newHistory = [...prev, newPoint];
+        if (newHistory.length > 20) newHistory.shift();
+        return newHistory;
+      });
+
       setNodes((nds) =>
         nds.map((node) => {
           const backendNode = response.data.nodes.find((n) => n.id === node.id);
@@ -151,7 +159,6 @@ function App() {
         })
       );
       
-      // (Your existing edge update logic here)
        setEdges((eds) => 
         eds.map((edge) => {
            const targetNode = response.data.nodes.find(n => n.id === edge.target);
@@ -177,7 +184,6 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* ... (Keep your existing Branding, Control Bar, and Stats code here) ... */}
       
       <div className="brand-fixed">
         <Activity size={20} className="text-accent" />
@@ -204,26 +210,33 @@ function App() {
 
       {result && (
         <div className="stats-fixed">
-          <div className="stat-item">
-            <span className="label">GLOBAL LATENCY</span>
-            <span className="val">{result.total_latency.toFixed(2)}ms</span>
+          <div className="stat-row">
+             <div className="stat-item">
+              <span className="label">GLOBAL LATENCY</span>
+              <span className="val">{result.total_latency.toFixed(2)}ms</span>
+            </div>
+            <div className="stat-item">
+              <span className="label">DB LOAD</span>
+              <span className="val">{result.db_traffic.toFixed(0)} rps</span>
+            </div>
+            <div className="stat-item">
+              <span className="label">STATUS</span>
+              <span className={`val status-${result.system_status === "Unstable" ? "bad" : "good"}`}>
+                {result.system_status}
+              </span>
+            </div>
           </div>
-          <div className="stat-item">
-            <span className="label">DB LOAD</span>
-            <span className="val">{result.db_traffic.toFixed(0)} rps</span>
-          </div>
-          <div className="stat-item">
-            <span className="label">SYSTEM STATUS</span>
-            <span className={`val status-${result.system_status === "Unstable" ? "bad" : "good"}`}>
-              {result.system_status}
-            </span>
-          </div>
+          
+          <LiveChart data={history} />
         </div>
       )}
 
       <ReactFlow 
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        nodes={nodes} 
+        edges={edges} 
+        nodeTypes={nodeTypes} // THIS IS THE FIX
+        onNodesChange={onNodesChange} 
+        onEdgesChange={onEdgesChange}
         fitView
         proOptions={{ hideAttribution: true }}
       >
